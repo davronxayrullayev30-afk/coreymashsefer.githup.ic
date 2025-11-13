@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Musiqa Topuvchi — Qidiruv</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#60a5fa;--muted:#94a3b8;--glass:rgba(255,255,255,0.03)}
+    body{margin:0;font-family:Inter, Arial, sans-serif;background:linear-gradient(180deg,#071426 0%, #081426 100%);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .app{width:100%;max-width:980px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    h1{font-size:18px;margin:0}
+    .searchBox{display:flex;gap:8px}
+    input[type="search"]{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;min-width:320px}
+    button{background:var(--accent);border:0;padding:10px 14px;border-radius:10px;color:#07202f;font-weight:700;cursor:pointer}
+    .hint{color:var(--muted);font-size:13px}
+
+    .results{margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+    .card{background:var(--card);border-radius:12px;padding:12px;box-shadow:0 6px 20px rgba(2,6,23,0.6);display:flex;gap:12px;align-items:flex-start}
+    .art{width:84px;height:84px;flex:0 0 84px;border-radius:8px;overflow:hidden;background:var(--glass)}
+    .meta{flex:1}
+    .meta h3{margin:0 0 6px 0;font-size:15px}
+    .meta p{margin:0;color:var(--muted);font-size:13px}
+    .controls{margin-top:8px;display:flex;gap:8px;align-items:center}
+    .play{padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;cursor:pointer}
+    a.itunes{font-size:13px;color:var(--accent);text-decoration:none}
+
+    .loading{margin-top:18px;color:var(--muted)}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+
+    @media (max-width:520px){input[type="search"]{min-width:140px}}
+  </style>
+</head>
+<body>
+  <main class="app" role="main">
+    <header>
+      <div>
+        <h1>Musiqa Topuvchi</h1>
+        <div class="hint">iTunes / Apple Music katalogidan qidiradi (preview mavjud bo'lsa eshitish mumkin).</div>
+      </div>
+
+      <form id="searchForm" class="searchBox" onsubmit="return false;">
+        <input id="q" type="search" placeholder="Qo'shiq, ijrochi yoki albom qidiring..." aria-label="Search" />
+        <button id="go">Qidirish</button>
+      </form>
+    </header>
+
+    <section id="resultsArea">
+      <div id="loading" class="loading" hidden>Qidirilmoqda…</div>
+      <div id="results" class="results" aria-live="polite"></div>
+      <div id="empty" class="loading" hidden>Hech narsa topilmadi.</div>
+    </section>
+
+    <footer>
+      <small>Manba: iTunes Search API. Ushbu sahifa test/ta'lim maqsadlari uchun; tijorat yoki litsenziyalangan tarkibni yuklab olishni qo'llab-quvvatlamaydi.</small>
+    </footer>
+  </main>
+
+  <script>
+    const form = document.getElementById('searchForm');
+    const qInput = document.getElementById('q');
+    const resultsEl = document.getElementById('results');
+    const loading = document.getElementById('loading');
+    const empty = document.getElementById('empty');
+
+    async function search(term) {
+      resultsEl.innerHTML = '';
+      empty.hidden = true;
+      loading.hidden = false;
+
+      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&limit=30&entity=song`;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Network error');
+        const data = await res.json();
+        renderResults(data.results || []);
+      } catch (err) {
+        resultsEl.innerHTML = `<div class="loading">Xato: ${err.message}</div>`;
+      } finally {
+        loading.hidden = true;
+      }
+    }
+
+    function renderResults(items) {
+      resultsEl.innerHTML = '';
+      if (!items.length) { empty.hidden = false; return; }
+      items.forEach(item => {
+        const card = document.createElement('article');
+        card.className = 'card';
+
+        const art = document.createElement('div'); art.className = 'art';
+        const img = document.createElement('img'); img.src = item.artworkUrl100.replace(/100x100bb.jpg$/, '300x300bb.jpg'); img.alt = `${item.trackName} artwork`; img.style.width='100%'; img.style.height='100%'; img.style.objectFit='cover';
+        art.appendChild(img);
+
+        const meta = document.createElement('div'); meta.className = 'meta';
+        const title = document.createElement('h3'); title.textContent = item.trackName;
+        const by = document.createElement('p'); by.textContent = item.artistName + ' — ' + (item.collectionName || 'Single');
+
+        const controls = document.createElement('div'); controls.className='controls';
+        // audio preview (if available)
+        if (item.previewUrl) {
+          const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none'; audio.src = item.previewUrl; audio.style.width = '160px';
+          controls.appendChild(audio);
+        }
+        const link = document.createElement('a'); link.href = item.trackViewUrl || item.collectionViewUrl || item.artistViewUrl; link.target = '_blank'; link.rel='noopener noreferrer'; link.className='itunes'; link.textContent = 'iTunes';
+        controls.appendChild(link);
+
+        meta.appendChild(title); meta.appendChild(by); meta.appendChild(controls);
+
+        card.appendChild(art); card.appendChild(meta);
+        resultsEl.appendChild(card);
+      });
+    }
+
+    // Quick search on Enter or button
+    form.addEventListener('submit', (e) => {
+      const term = qInput.value.trim();
+      if (!term) return;
+      search(term);
+    });
+    document.getElementById('go').addEventListener('click', (e)=>{ e.preventDefault(); form.dispatchEvent(new Event('submit')); });
+
+    // Optional: demo initial results
+    qInput.value = 'Adele'; search('Adele');
+  </script>
+</body>
+</html>
